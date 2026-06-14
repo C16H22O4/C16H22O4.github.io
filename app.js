@@ -133,6 +133,7 @@ let recentQueryTimes = [];
 let provinceOptions = [];
 let competitionOptions = { languages: [], groups: [], subjectsByEdition: {} };
 let dataProvider = null;
+let provinceMenuFrame = 0;
 const lastSearchInputKeys = { person: "", competition: "", school: "" };
 const activeSearchRequestKeys = { person: "", school: "" };
 const lastCompletedSearchRequestKeys = { person: "", school: "" };
@@ -1296,7 +1297,7 @@ function syncSubjectControls() {
 
 function renderProvinceMenu() {
   if (provinceCombo.dataset.disabled === "true") {
-    provinceMenu.hidden = true;
+    hideProvinceMenu();
     return;
   }
   const query = provinceSearch.value;
@@ -1307,7 +1308,7 @@ function renderProvinceMenu() {
     .slice(0, 20);
   if (!matches.length) {
     provinceMenu.innerHTML = `<div class="combo-empty">没有匹配省份</div>`;
-    provinceMenu.hidden = false;
+    showProvinceMenu();
     return;
   }
   provinceMenu.innerHTML = matches
@@ -1316,8 +1317,7 @@ function renderProvinceMenu() {
       <small>${formatInt(option.total)} 条</small>
     </button>`)
     .join("");
-  provinceMenu.hidden = false;
-  positionProvinceMenu();
+  showProvinceMenu();
 }
 
 function selectProvince(value, pushSearch = true) {
@@ -1336,13 +1336,35 @@ function positionProvinceMenu() {
   if (provinceMenu.hidden) return;
   const rect = provinceSearch.getBoundingClientRect();
   const margin = 12;
-  const top = Math.min(rect.bottom + 6, window.innerHeight - 120);
+  const viewportHeight = window.visualViewport?.height || window.innerHeight;
+  const viewportWidth = window.visualViewport?.width || window.innerWidth;
+  const top = Math.max(margin, Math.min(rect.bottom + 6, viewportHeight - margin - 80));
   const width = Math.max(220, Math.min(rect.width, window.innerWidth - margin * 2));
-  const left = Math.min(Math.max(margin, rect.left), window.innerWidth - width - margin);
+  const left = Math.min(Math.max(margin, rect.left), viewportWidth - width - margin);
+  const availableBelow = viewportHeight - top - margin;
+  const maxHeight = Math.max(96, Math.min(280, availableBelow));
   provinceMenu.style.left = `${left}px`;
   provinceMenu.style.top = `${top}px`;
   provinceMenu.style.width = `${width}px`;
-  provinceMenu.style.maxHeight = `${Math.max(160, window.innerHeight - top - margin)}px`;
+  provinceMenu.style.maxHeight = `${maxHeight}px`;
+}
+
+function scheduleProvinceMenuPosition() {
+  if (provinceMenu.hidden || provinceMenuFrame) return;
+  provinceMenuFrame = window.requestAnimationFrame(() => {
+    provinceMenuFrame = 0;
+    positionProvinceMenu();
+  });
+}
+
+function showProvinceMenu() {
+  provinceMenu.hidden = false;
+  positionProvinceMenu();
+}
+
+function hideProvinceMenu() {
+  provinceMenu.hidden = true;
+  provinceMenu.removeAttribute("style");
 }
 
 function commitProvinceText({ allowFirst = true } = {}) {
@@ -1366,8 +1388,7 @@ function commitProvinceText({ allowFirst = true } = {}) {
 function clearProvince() {
   provinceValue.value = "";
   provinceSearch.value = "";
-  provinceMenu.hidden = true;
-  provinceMenu.removeAttribute("style");
+  hideProvinceMenu();
 }
 
 function syncProvinceControl() {
@@ -1820,7 +1841,7 @@ provinceSearch.addEventListener("keydown", (event) => {
     commitProvinceText();
   }
   if (event.key === "Escape") {
-    provinceMenu.hidden = true;
+    hideProvinceMenu();
   }
 });
 provinceSearch.addEventListener("blur", () => {
@@ -1828,7 +1849,7 @@ provinceSearch.addEventListener("blur", () => {
     if (!provinceValue.value && !commitProvinceText({ allowFirst: false })) {
       provinceSearch.value = "";
     }
-    provinceMenu.hidden = true;
+    hideProvinceMenu();
     competitionValidationMessage();
   }, 120);
 });
@@ -1840,8 +1861,8 @@ provinceMenu.addEventListener("click", (event) => {
   if (!option) return;
   selectProvince(option.dataset.value);
 });
-window.addEventListener("resize", positionProvinceMenu);
-window.addEventListener("scroll", positionProvinceMenu, true);
+window.addEventListener("resize", scheduleProvinceMenuPosition);
+window.addEventListener("scroll", scheduleProvinceMenuPosition, true);
 competitionSchool.addEventListener("input", scheduleCurrentSearch);
 competitionKeyword.addEventListener("input", scheduleCurrentSearch);
 schoolRankInput.addEventListener("input", scheduleCurrentSearch);
