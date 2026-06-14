@@ -219,6 +219,12 @@ function searchRequestKey(mode, params, page) {
   return `${mode}:${keyParams.toString()}`;
 }
 
+function pushSearchUrl(mode, params, push) {
+  if (push) {
+    history.pushState({ view: "main", mode }, "", `/?${params.toString()}`);
+  }
+}
+
 function isRepeatedSearchRequest(mode, key) {
   return activeSearchRequestKeys[mode] === key || lastCompletedSearchRequestKeys[mode] === key;
 }
@@ -1360,7 +1366,10 @@ async function runSearch(push = true) {
   if (state.school) params.set("school", state.school);
   addPageToUrl(params, page);
   const requestKey = searchRequestKey("person", params, page);
-  if (isRepeatedSearchRequest("person", requestKey)) return;
+  if (isRepeatedSearchRequest("person", requestKey)) {
+    pushSearchUrl("person", params, push);
+    return;
+  }
   if (!reserveQuerySlot()) {
     setEmpty(personTableWrap, emptyState, "请求太频繁，请稍后再试");
     hidePagination("person");
@@ -1376,9 +1385,7 @@ async function runSearch(push = true) {
     if (!ensurePageInRange("person", payload.total, runSearch)) return;
     renderResults(payload.items || [], (page - 1) * PAGE_SIZE);
     updatePagination("person", payload.total);
-    if (push) {
-      history.pushState({ view: "main", mode: "person" }, "", `/?${params.toString()}`);
-    }
+    pushSearchUrl("person", params, push);
     completed = true;
   } catch (error) {
     setEmpty(personTableWrap, emptyState, error.status === 429 ? "请求太频繁，请稍后再试" : "查询失败");
@@ -1496,7 +1503,10 @@ async function runSchoolSearch(push = true) {
   if (q) params.set("q", q);
   addPageToUrl(params, page);
   const requestKey = searchRequestKey("school", params, page);
-  if (isRepeatedSearchRequest("school", requestKey)) return;
+  if (isRepeatedSearchRequest("school", requestKey)) {
+    pushSearchUrl("school", params, push);
+    return;
+  }
   markSearchRequestStarted("school", requestKey);
   schoolBody.innerHTML = "";
   setEmpty(schoolTableWrap, schoolEmpty, "加载中");
@@ -1507,9 +1517,7 @@ async function runSchoolSearch(push = true) {
     if (!ensurePageInRange("school", payload.total, runSchoolSearch)) return;
     renderSchools(payload.items || [], (page - 1) * PAGE_SIZE);
     updatePagination("school", payload.total);
-    if (push) {
-      history.pushState({ view: "main", mode: "school" }, "", `/?${params.toString()}`);
-    }
+    pushSearchUrl("school", params, push);
     completed = true;
   } catch {
     setEmpty(schoolTableWrap, schoolEmpty, "查询失败");
