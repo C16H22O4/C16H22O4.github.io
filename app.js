@@ -132,6 +132,9 @@ let recentQueryTimes = [];
 let provinceOptions = [];
 let competitionOptions = { languages: [], groups: [], subjectsByEdition: {} };
 let dataProvider = null;
+const lastSearchInputKeys = { person: "", competition: "", school: "" };
+const activeSearchRequestKeys = { person: "", school: "" };
+const lastCompletedSearchRequestKeys = { person: "", school: "" };
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -184,6 +187,53 @@ function apiParams(params, page) {
   next.set("limit", String(PAGE_SIZE));
   next.set("offset", String((page - 1) * PAGE_SIZE));
   return next;
+}
+
+function hasSearchInputKey(mode) {
+  return Object.prototype.hasOwnProperty.call(lastSearchInputKeys, mode);
+}
+
+function currentSearchInputKey(mode) {
+  if (mode === "person") {
+    return `${qInput.value.trim()}\u0000${schoolInput.value.trim()}`;
+  }
+  if (mode === "competition") {
+    return `${competitionSchool.value.trim()}\u0000${competitionKeyword.value.trim()}`;
+  }
+  if (mode === "school") {
+    return schoolRankInput.value.trim();
+  }
+  return "";
+}
+
+function syncSearchInputKey(mode) {
+  if (hasSearchInputKey(mode)) {
+    lastSearchInputKeys[mode] = currentSearchInputKey(mode);
+  }
+}
+
+function searchRequestKey(mode, params, page) {
+  const keyParams = new URLSearchParams(params);
+  keyParams.delete("mode");
+  keyParams.set("page", String(page));
+  return `${mode}:${keyParams.toString()}`;
+}
+
+function isRepeatedSearchRequest(mode, key) {
+  return activeSearchRequestKeys[mode] === key || lastCompletedSearchRequestKeys[mode] === key;
+}
+
+function markSearchRequestStarted(mode, key) {
+  activeSearchRequestKeys[mode] = key;
+}
+
+function markSearchRequestFinished(mode, key, completed) {
+  if (activeSearchRequestKeys[mode] === key) {
+    activeSearchRequestKeys[mode] = "";
+  }
+  if (completed) {
+    lastCompletedSearchRequestKeys[mode] = key;
+  }
 }
 
 function hidePagination(mode) {
@@ -1299,23 +1349,28 @@ function navigate(mode, push = true) {
 }
 
 async function runSearch(push = true) {
-  if (!reserveQuerySlot()) {
-    setEmpty(personTableWrap, emptyState, "请求太频繁，请稍后再试");
-    hidePagination("person");
-    return;
-  }
   state.mode = "person";
   state.q = qInput.value.trim();
   state.school = schoolInput.value.trim();
+  syncSearchInputKey("person");
   const page = currentPage("person");
   const params = new URLSearchParams();
   params.set("mode", "person");
   if (state.q) params.set("q", state.q);
   if (state.school) params.set("school", state.school);
   addPageToUrl(params, page);
+  const requestKey = searchRequestKey("person", params, page);
+  if (isRepeatedSearchRequest("person", requestKey)) return;
+  if (!reserveQuerySlot()) {
+    setEmpty(personTableWrap, emptyState, "请求太频繁，请稍后再试");
+    hidePagination("person");
+    return;
+  }
+  markSearchRequestStarted("person", requestKey);
   resultsBody.innerHTML = "";
   setEmpty(personTableWrap, emptyState, "加载中");
   hidePagination("person");
+  let completed = false;
   try {
     const payload = await dataProvider.search(apiParams(params, page), page);
     if (!ensurePageInRange("person", payload.total, runSearch)) return;
@@ -1324,9 +1379,12 @@ async function runSearch(push = true) {
     if (push) {
       history.pushState({ view: "main", mode: "person" }, "", `/?${params.toString()}`);
     }
+    completed = true;
   } catch (error) {
     setEmpty(personTableWrap, emptyState, error.status === 429 ? "请求太频繁，请稍后再试" : "查询失败");
     hidePagination("person");
+  } finally {
+    markSearchRequestFinished("person", requestKey, completed);
   }
 }
 
@@ -1352,6 +1410,7 @@ function renderResults(items, offset = 0) {
 
 async function runCompetitionSearch(push = true) {
   state.mode = "competition";
+  syncSearchInputKey("competition");
   const page = currentPage("competition");
   const params = new URLSearchParams();
   params.set("mode", "competition");
@@ -1428,15 +1487,21 @@ function renderCompetition(items) {
 }
 
 async function runSchoolSearch(push = true) {
+  state.mode = "school";
   const page = currentPage("school");
   const params = new URLSearchParams();
   params.set("mode", "school");
   const q = schoolRankInput.value.trim();
+  syncSearchInputKey("school");
   if (q) params.set("q", q);
   addPageToUrl(params, page);
+  const requestKey = searchRequestKey("school", params, page);
+  if (isRepeatedSearchRequest("school", requestKey)) return;
+  markSearchRequestStarted("school", requestKey);
   schoolBody.innerHTML = "";
   setEmpty(schoolTableWrap, schoolEmpty, "加载中");
   hidePagination("school");
+  let completed = false;
   try {
     const payload = await dataProvider.schools(apiParams(params, page), page);
     if (!ensurePageInRange("school", payload.total, runSchoolSearch)) return;
@@ -1445,9 +1510,12 @@ async function runSchoolSearch(push = true) {
     if (push) {
       history.pushState({ view: "main", mode: "school" }, "", `/?${params.toString()}`);
     }
+    completed = true;
   } catch {
     setEmpty(schoolTableWrap, schoolEmpty, "查询失败");
     hidePagination("school");
+  } finally {
+    markSearchRequestFinished("school", requestKey, completed);
   }
 }
 
@@ -1562,6 +1630,9 @@ function renderSchoolDetail(payload, offset = 0) {
 
 function scheduleCurrentSearch() {
   if (!views.detail.hidden || !views.schoolDetail.hidden) return;
+  const inputKey = currentSearchInputKey(state.mode);
+  if (hasSearchInputKey(state.mode) && inputKey === lastSearchInputKeys[state.mode]) return;
+  syncSearchInputKey(state.mode);
   resetPage(state.mode);
   window.clearTimeout(searchTimer);
   searchTimer = window.setTimeout(() => {
