@@ -13,6 +13,7 @@ const PAGE_SIZE = 50;
 const QUERY_INTERVAL_MS = 500;
 const QUERY_RATE_WINDOW_MS = 1000;
 const QUERY_RATE_MAX_REQUESTS = 10;
+const STATIC_DATA_VERSION = "20260614-school-fix";
 
 const columns = [
   ["nationalFirst", "国一"],
@@ -163,6 +164,19 @@ function currentPage(mode) {
 
 function setCurrentPage(mode, page) {
   state[pageKey(mode)] = Math.max(1, Number(page) || 1);
+}
+
+function totalFromPager(mode) {
+  const summary = pagers[mode]?.summary?.textContent || "";
+  const match = summary.match(/共\s*([\d,，]+)\s*条/);
+  return match ? Number(match[1].replace(/[，,]/g, "")) : 0;
+}
+
+function restoreCachedPagination(mode) {
+  const total = totalFromPager(mode);
+  if (total > 0) {
+    updatePagination(mode, total);
+  }
 }
 
 function resetPage(mode) {
@@ -369,8 +383,14 @@ function fuzzySubsequenceScore(query, values) {
   return 0;
 }
 
+function versionedStaticUrl(url) {
+  if (!String(url).startsWith("/data/")) return url;
+  const separator = String(url).includes("?") ? "&" : "?";
+  return `${url}${separator}v=${encodeURIComponent(STATIC_DATA_VERSION)}`;
+}
+
 async function fetchJson(url) {
-  const response = await fetch(url);
+  const response = await fetch(versionedStaticUrl(url));
   if (!response.ok) {
     const error = new Error(`HTTP ${response.status}`);
     error.status = response.status;
@@ -620,6 +640,7 @@ class StaticDataProvider {
     if (schoolQ) filtered = filtered.filter((item) => normalizeClientText(item.school).includes(schoolQ));
     if (q) filtered = filtered.filter((item) => normalizeClientText(item.name).includes(q));
     filtered.sort((a, b) =>
+      (b.stage === "国赛" ? 1 : 0) - (a.stage === "国赛" ? 1 : 0) ||
       Number(b.edition || 0) - Number(a.edition || 0) ||
       String(a.language || "").localeCompare(String(b.language || ""), "zh-CN") ||
       String(a.group || "").localeCompare(String(b.group || ""), "zh-CN") ||
@@ -1062,6 +1083,7 @@ class StaticDataProviderV2 {
     const aRegion = this.regionById.get(Number(a.row[4])) || "";
     const bRegion = this.regionById.get(Number(b.row[4])) || "";
     return (
+      Number(b.scopeCode || 0) - Number(a.scopeCode || 0) ||
       Number(b.edition || 0) - Number(a.edition || 0) ||
       String(a.subject.language || "").localeCompare(String(b.subject.language || ""), "zh-CN") ||
       String(a.subject.group_name || "").localeCompare(String(b.subject.group_name || ""), "zh-CN") ||
@@ -1367,6 +1389,7 @@ async function runSearch(push = true) {
   addPageToUrl(params, page);
   const requestKey = searchRequestKey("person", params, page);
   if (isRepeatedSearchRequest("person", requestKey)) {
+    restoreCachedPagination("person");
     pushSearchUrl("person", params, push);
     return;
   }
@@ -1429,6 +1452,12 @@ async function runCompetitionSearch(push = true) {
   if (competitionSchool.value.trim()) params.set("school", competitionSchool.value.trim());
   if (competitionKeyword.value.trim()) params.set("q", competitionKeyword.value.trim());
   addPageToUrl(params, page);
+  const requestKey = searchRequestKey("competition", params, page);
+  if (isRepeatedSearchRequest("competition", requestKey)) {
+    restoreCachedPagination("competition");
+    pushSearchUrl("competition", params, push);
+    return;
+  }
   competitionBody.innerHTML = "";
   const validationMessage = competitionValidationMessage();
   if (validationMessage) {
@@ -1444,19 +1473,22 @@ async function runCompetitionSearch(push = true) {
     hidePagination("competition");
     return;
   }
+  markSearchRequestStarted("competition", requestKey);
   setEmpty(competitionTableWrap, competitionEmpty, "加载中");
   hidePagination("competition");
+  let completed = false;
   try {
     const payload = await dataProvider.competition(apiParams(params, page), page);
     if (!ensurePageInRange("competition", payload.total, runCompetitionSearch)) return;
     renderCompetition(payload.items || []);
     updatePagination("competition", payload.total);
-    if (push) {
-      history.pushState({ view: "main", mode: "competition" }, "", `/?${params.toString()}`);
-    }
+    pushSearchUrl("competition", params, push);
+    completed = true;
   } catch (error) {
     setEmpty(competitionTableWrap, competitionEmpty, error.status === 429 ? "请求太频繁，请稍后再试" : "查询失败");
     hidePagination("competition");
+  } finally {
+    markSearchRequestFinished("competition", requestKey, completed);
   }
 }
 
@@ -1504,6 +1536,7 @@ async function runSchoolSearch(push = true) {
   addPageToUrl(params, page);
   const requestKey = searchRequestKey("school", params, page);
   if (isRepeatedSearchRequest("school", requestKey)) {
+    restoreCachedPagination("school");
     pushSearchUrl("school", params, push);
     return;
   }
