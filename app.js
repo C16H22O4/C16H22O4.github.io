@@ -13,7 +13,7 @@ const PAGE_SIZE = 50;
 const QUERY_INTERVAL_MS = 500;
 const QUERY_RATE_WINDOW_MS = 1000;
 const QUERY_RATE_MAX_REQUESTS = 10;
-const STATIC_DATA_VERSION = "20260614-mobile-fix";
+const STATIC_DATA_VERSION = "20260615-search-index";
 
 const columns = [
   ["nationalFirst", "国一"],
@@ -940,36 +940,72 @@ class StaticDataProviderV2 {
     return payload[key] || [];
   }
 
-  async candidateIds(query) {
-    const q = normalizeClientText(query);
-    if (!q) return [];
-    if (/^[0-9a-z]{1,24}$/.test(q)) {
-      const ids = new Set();
-      for (const id of await this.tokenIds("p", q)) ids.add(id);
-      return [...ids].sort((a, b) => a - b);
+  async tokenRows(directory, kind, token) {
+    const key = `${kind}:${token}`;
+    const shard = tokenShard(key).toString(16).padStart(2, "0");
+    const payload = await this.load(`/data/${directory}/${shard}.json`);
+    const found = Array.isArray(payload) ? payload.find((entry) => entry[0] === key) : null;
+    if (found) return this.decodeDeltas(found[1]);
+    return payload[key] || [];
+  }
+
+  queryBigrams(query) {
+    const chars = [...normalizeClientText(query)];
+    const grams = [];
+    for (let index = 0; index + 1 < chars.length; index += 1) {
+      grams.push(chars.slice(index, index + 2).join(""));
     }
-    const chars = [...new Set([...q].filter(Boolean))];
+    return [...new Set(grams)];
+  }
+
+  async intersectTokenRows(directory, kind, tokens) {
     let current = null;
-    for (const char of chars) {
-      const ids = await this.tokenIds("c", char);
-      current = current === null ? ids : this.intersectSorted(current, ids);
+    for (const token of [...new Set(tokens)].filter(Boolean)) {
+      const rows = await this.tokenRows(directory, kind, token);
+      current = current === null ? rows : this.intersectSorted(current, rows);
       if (!current.length) break;
     }
     return current || [];
   }
 
+  async candidateIds(query) {
+    const q = normalizeClientText(query);
+    if (!q) return [];
+    if (/^[0-9a-z]{1,24}$/.test(q)) {
+      return this.tokenRows("search", "p", q);
+    }
+    const grams = this.queryBigrams(q);
+    if (grams.length) {
+      const rows = await this.intersectTokenRows("search", "n", grams);
+      if (rows.length || q.length > 1) return rows;
+    }
+    const chars = [...new Set([...q].filter(Boolean))];
+    return this.intersectTokenRows("search", "c", chars);
+  }
+
   async rowsForSchoolQuery(query) {
     const q = normalizeClientText(query);
     if (!q) return [];
-    const schools = await this.allSchools();
-    const lists = [];
-    for (const school of schools) {
-      const dictSchool = this.schoolById.get(Number(school.sid)) || {};
-      const norm = dictSchool.norm || normalizeClientText(school.school);
-      if (norm.includes(q)) {
-        lists.push(await this.load(`/data/schools/${school.sid}.json`));
-      }
+    if (/^[0-9a-z]{1,24}$/.test(q)) {
+      const rows = await this.tokenRows("school_search", "p", q);
+      if (rows.length) return rows;
+      const schoolIds = await this.tokenRows("school_search_ids", "p", q);
+      return this.rowsForSchoolIds(schoolIds);
     }
+    const grams = this.queryBigrams(q);
+    if (grams.length) {
+      const rows = await this.intersectTokenRows("school_search", "n", grams);
+      if (rows.length || q.length > 1) return rows;
+    }
+    const chars = [...new Set([...q].filter(Boolean))];
+    return this.intersectTokenRows("school_search", "c", chars);
+  }
+
+  async rowsForSchoolIds(schoolIds) {
+    const lists = await Promise.all(
+      [...new Set((schoolIds || []).map((id) => Number(id)).filter(Boolean))]
+        .map((schoolId) => this.load(`/data/schools/${schoolId}.json`))
+    );
     return this.mergeSortedUnique(lists);
   }
 
@@ -990,7 +1026,6 @@ class StaticDataProviderV2 {
     const offset = Number(params.get("offset") || 0);
     const q = normalizeClientText(params.get("q"));
     const school = normalizeClientText(params.get("school"));
-    const asciiQuery = /^[0-9a-z]{1,24}$/.test(q);
     if (!q && !school) {
       const startShard = peopleShardForRow(offset + 1);
       const endShard = peopleShardForRow(offset + limit);
@@ -1005,15 +1040,7 @@ class StaticDataProviderV2 {
         offset,
       };
     }
-    let rows = await this.rowsForSearch(q, school);
-    if (q && !asciiQuery && q.length > 1) {
-      const filteredRows = [];
-      for (const rowNo of rows) {
-        const item = await this.loadPersonByRow(rowNo);
-        if (item && normalizeClientText(item.name).includes(q)) filteredRows.push(rowNo);
-      }
-      rows = filteredRows;
-    }
+    const rows = await this.rowsForSearch(q, school);
     return { total: rows.length, items: await this.loadRows(paginateItems(rows, limit, offset)), limit, offset };
   }
 
