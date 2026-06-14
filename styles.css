@@ -160,16 +160,16 @@ body {
 }
 
 .data-notice {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  min-height: 36px;
-  margin: 18px 0 0;
-  padding: 0 12px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 16px;
   border: 1px solid #f3d19c;
   border-radius: 8px;
   background: #fff7ed;
   color: #8a4b12;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
 }
 
