@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>蓝桥杯 Finder</title>
+    <link rel="icon" href="/logo.png">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand-link" href="/" data-home>
+        <img class="brand-logo" src="/logo.png" alt="">
+        <span>蓝桥杯 Finder</span>
+      </a>
+      <nav class="main-nav" aria-label="主导航">
+        <a class="nav-link" href="/" data-mode="home">首页</a>
+        <a class="nav-link" href="/?mode=competition" data-mode="competition">比赛</a>
+        <a class="nav-link" href="/?mode=person" data-mode="person">选手</a>
+        <a class="nav-link" href="/?mode=school" data-mode="school">学校</a>
+      </nav>
+    </header>
+
+    <main class="shell">
+      <section id="startup-loading" class="startup-loading" aria-live="polite">
+        <div class="loading-spinner" aria-hidden="true"></div>
+        <h1>正在加载</h1>
+        <p>正在恢复当前页面</p>
+      </section>
+
+      <section id="home-view" class="home-view" hidden>
+        <div class="hero-panel">
+          <div class="hero-copy">
+            <p class="eyebrow">Lanqiao Cup Award Explorer</p>
+            <h1>蓝桥杯获奖数据查询与排行</h1>
+            <p class="hero-text">面向选手、学校和比赛名单的结构化查询工具，支持按姓名拼音首字母检索、比赛组别筛选和学校奖项汇总排行。</p>
+            <div class="hero-actions">
+              <button class="ghost-button" data-jump="competition" type="button">查比赛名单</button>
+              <button class="ghost-button dark" data-jump="person" type="button">查选手成绩</button>
+            </div>
+          </div>
+          <div class="contact-panel">
+            <div>
+              <span>开发者</span>
+              <strong>下方群聊的群主</strong>
+            </div>
+            <div>
+              <span>交流 QQ 群</span>
+              <strong>1092799675</strong>
+            </div>
+          </div>
+        </div>
+
+        <section class="bilibili-promo" aria-label="B 站蓝桥杯视频推荐">
+          <div class="bili-copy">
+            <p class="eyebrow">Bilibili 蓝桥杯备赛频道</p>
+            <h2>去 B 站关注 yeVegetable，看更鲜活的蓝桥杯讲解</h2>
+            <p>真题复盘、赛前冲刺、省赛解析、直播讲题都在更新。查完榜单不知道下一套题刷什么，可以顺手去看看视频版思路。</p>
+            <div class="bili-actions">
+              <a class="bili-button" href="https://space.bilibili.com/182121317" target="_blank" rel="noopener noreferrer">前往 B 站主页</a>
+              <span>UID 182121317</span>
+            </div>
+          </div>
+          <div class="bili-stats" aria-label="账号数据">
+            <div>
+              <strong><span>7,800</span></strong>
+              <span>粉丝</span>
+            </div>
+            <div>
+              <strong><span>54 万</span><span class="metric-plus">+</span></strong>
+              <span>播放</span>
+            </div>
+            <div>
+              <strong><span>55</span></strong>
+              <span>投稿</span>
+            </div>
+          </div>
+          <div class="bili-topics">
+            <span>省赛真题</span>
+            <span>C++ / Java / Python</span>
+            <span>冲刺讲解</span>
+            <span>直播回放</span>
+          </div>
+        </section>
+
+        <div class="stat-grid" id="home-stats"></div>
+
+        <div class="home-rank-grid">
+          <section class="rank-card">
+            <div class="rank-head">
+              <h2>选手排行</h2>
+              <button class="text-button" data-jump="person" type="button">全部选手</button>
+            </div>
+            <ol class="rank-list" id="home-contestants"></ol>
+          </section>
+          <section class="rank-card">
+            <div class="rank-head">
+              <h2>学校排行</h2>
+              <button class="text-button" data-jump="school" type="button">全部学校</button>
+            </div>
+            <ol class="rank-list" id="home-schools"></ol>
+          </section>
+        </div>
+      </section>
+
+      <section id="search-view" hidden>
+        <form class="search-panel" id="search-form">
+          <div class="panel-head">
+            <div class="panel-title">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+              <h1>搜索</h1>
+            </div>
+            <div class="meta-line" id="meta-line"></div>
+          </div>
+          <div class="search-grid" id="person-controls">
+            <input id="q-input" name="q" autocomplete="off" placeholder="姓名 / 拼音首字母">
+            <input id="school-input" name="school" autocomplete="off" placeholder="学校">
+            <button type="submit">搜索</button>
+          </div>
+          <div class="competition-grid" id="competition-controls" hidden>
+            <select id="scope-select" aria-label="赛段">
+              <option value="">省赛 / 国赛</option>
+            </select>
+            <div class="combo-field" id="province-combo" data-disabled="true">
+              <input id="province-search" type="search" autocomplete="off" placeholder="先选择省赛" aria-label="省份">
+              <input id="province-value" type="hidden">
+              <div class="combo-menu" id="province-menu" role="listbox" hidden></div>
+            </div>
+            <select id="edition-select"></select>
+            <select id="language-select"></select>
+            <select id="group-select"></select>
+            <input id="competition-school" autocomplete="off" placeholder="学校">
+            <input id="competition-keyword" autocomplete="off" placeholder="关键字：姓名">
+            <button id="competition-submit" type="button">搜索</button>
+          </div>
+        </form>
+
+        <div class="table-wrap" id="person-table-wrap">
+          <table class="result-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>姓名</th>
+                <th>学校</th>
+                <th>国一</th>
+                <th>国二</th>
+                <th>国三</th>
+                <th>省一</th>
+                <th>省二</th>
+                <th>省三</th>
+                <th>总计</th>
+              </tr>
+            </thead>
+            <tbody id="results-body"></tbody>
+          </table>
+          <div class="empty" id="empty-state">暂无数据</div>
+        </div>
+        <div class="pagination-bar" id="person-pagination" hidden>
+          <div class="pagination-summary" id="person-page-summary"></div>
+          <div class="pagination-controls">
+            <button class="pagination-button" id="person-prev-page" type="button">上一页</button>
+            <label class="page-jump">第 <input id="person-page-input" type="number" min="1" value="1"> 页</label>
+            <span class="page-total" id="person-page-total"></span>
+            <button class="pagination-button" id="person-goto-page" type="button">跳转</button>
+            <button class="pagination-button" id="person-next-page" type="button">下一页</button>
+          </div>
+        </div>
+
+        <div class="table-wrap" id="competition-table-wrap" hidden>
+          <table class="competition-table">
+            <thead>
+              <tr>
+                <th>届次</th>
+                <th>赛段</th>
+                <th>赛区</th>
+                <th>排名</th>
+                <th>学校名称</th>
+                <th>考生姓名</th>
+                <th>科目组别</th>
+                <th>奖项</th>
+              </tr>
+            </thead>
+            <tbody id="competition-body"></tbody>
+          </table>
+          <div class="empty" id="competition-empty">暂无数据</div>
+        </div>
+        <div class="pagination-bar" id="competition-pagination" hidden>
+          <div class="pagination-summary" id="competition-page-summary"></div>
+          <div class="pagination-controls">
+            <button class="pagination-button" id="competition-prev-page" type="button">上一页</button>
+            <label class="page-jump">第 <input id="competition-page-input" type="number" min="1" value="1"> 页</label>
+            <span class="page-total" id="competition-page-total"></span>
+            <button class="pagination-button" id="competition-goto-page" type="button">跳转</button>
+            <button class="pagination-button" id="competition-next-page" type="button">下一页</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="school-view" hidden>
+        <form class="search-panel" id="school-form">
+          <div class="panel-head">
+            <div class="panel-title">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18"></path><path d="M5 21V9l7-4 7 4v12"></path><path d="M9 21v-6h6v6"></path></svg>
+              <h1>学校排行</h1>
+            </div>
+            <div class="meta-line" id="school-meta-line"></div>
+          </div>
+          <div class="school-grid">
+            <input id="school-rank-input" autocomplete="off" placeholder="学校">
+            <button type="submit">搜索</button>
+          </div>
+        </form>
+
+        <div class="table-wrap" id="school-table-wrap">
+          <table class="school-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>学校</th>
+                <th>最高排名</th>
+                <th>国一</th>
+                <th>国二</th>
+                <th>国三</th>
+                <th>省一</th>
+                <th>省二</th>
+                <th>省三</th>
+                <th>总计</th>
+              </tr>
+            </thead>
+            <tbody id="school-body"></tbody>
+          </table>
+          <div class="empty" id="school-empty">暂无数据</div>
+        </div>
+        <div class="pagination-bar" id="school-pagination" hidden>
+          <div class="pagination-summary" id="school-page-summary"></div>
+          <div class="pagination-controls">
+            <button class="pagination-button" id="school-prev-page" type="button">上一页</button>
+            <label class="page-jump">第 <input id="school-page-input" type="number" min="1" value="1"> 页</label>
+            <span class="page-total" id="school-page-total"></span>
+            <button class="pagination-button" id="school-goto-page" type="button">跳转</button>
+            <button class="pagination-button" id="school-next-page" type="button">下一页</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="detail-view" hidden>
+        <div class="detail-head">
+          <button class="back-button" id="back-button" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>
+            返回
+          </button>
+          <div>
+            <h1 id="detail-name"></h1>
+            <p id="detail-school"></p>
+          </div>
+        </div>
+
+        <div class="stats-strip" id="detail-stats"></div>
+
+        <div class="table-wrap">
+          <table class="detail-table">
+            <thead>
+              <tr>
+                <th>届次</th>
+                <th>赛段</th>
+                <th>赛区</th>
+                <th>排名</th>
+                <th>科目</th>
+                <th>奖项</th>
+              </tr>
+            </thead>
+            <tbody id="detail-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="school-detail-view" hidden>
+        <div class="detail-head">
+          <button class="back-button" id="school-back-button" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>
+            返回
+          </button>
+          <div>
+            <h1 id="school-detail-name"></h1>
+            <p id="school-detail-meta"></p>
+          </div>
+        </div>
+
+        <div class="stats-strip" id="school-detail-stats"></div>
+
+        <div class="table-wrap" id="school-detail-table-wrap">
+          <table class="school-detail-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>姓名</th>
+                <th>国一</th>
+                <th>国二</th>
+                <th>国三</th>
+                <th>省一</th>
+                <th>省二</th>
+                <th>省三</th>
+                <th>总计</th>
+              </tr>
+            </thead>
+            <tbody id="school-detail-body"></tbody>
+          </table>
+          <div class="empty" id="school-detail-empty">暂无数据</div>
+        </div>
+        <div class="pagination-bar" id="school-detail-pagination" hidden>
+          <div class="pagination-summary" id="school-detail-page-summary"></div>
+          <div class="pagination-controls">
+            <button class="pagination-button" id="school-detail-prev-page" type="button">上一页</button>
+            <label class="page-jump">第 <input id="school-detail-page-input" type="number" min="1" value="1"> 页</label>
+            <span class="page-total" id="school-detail-page-total"></span>
+            <button class="pagination-button" id="school-detail-goto-page" type="button">跳转</button>
+            <button class="pagination-button" id="school-detail-next-page" type="button">下一页</button>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>
