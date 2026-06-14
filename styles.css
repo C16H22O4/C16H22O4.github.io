@@ -27,6 +27,7 @@ body {
   color: var(--text);
   font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", Arial, sans-serif;
   font-size: 16px;
+  overflow-x: hidden;
 }
 
 .site-header {
@@ -66,6 +67,7 @@ body {
   display: flex;
   align-items: center;
   gap: 30px;
+  flex-wrap: wrap;
 }
 
 .nav-link {
@@ -504,6 +506,7 @@ button {
 input,
 select {
   width: 100%;
+  min-width: 0;
   border: 1px solid var(--line);
   background: #fff;
   padding: 0 18px;
@@ -535,13 +538,14 @@ select.is-invalid {
 }
 
 .combo-menu {
-  position: absolute;
+  position: fixed;
   left: 0;
-  right: 0;
-  top: calc(100% + 6px);
-  z-index: 60;
+  top: 0;
+  z-index: 1000;
   max-height: 280px;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   border: 1px solid var(--line-strong);
   border-radius: 8px;
   background: #fff;
@@ -595,6 +599,7 @@ button:hover {
   border: 1px solid var(--line);
   background: var(--panel);
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 table {
@@ -977,15 +982,20 @@ a:hover {
   }
 
   .main-nav {
-    gap: 24px;
+    width: 100%;
+    gap: 10px;
   }
 
-.nav-link {
-    font-size: 18px;
+  .nav-link {
+    min-height: 38px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 2px;
+    font-size: 17px;
   }
 
   .shell {
-    padding: 16px;
+    padding: 12px;
   }
 
   .hero-panel {
@@ -1050,27 +1060,63 @@ a:hover {
   .search-grid,
   .school-grid {
     grid-template-columns: 1fr;
-    padding: 20px;
+    gap: 10px;
+    padding: 16px;
   }
 
   .competition-grid {
     grid-template-columns: 1fr;
-    padding: 20px;
+    gap: 10px;
+    padding: 16px;
+  }
+
+  .combo-menu {
+    border-radius: 10px;
+    box-shadow: 0 18px 36px rgba(15, 23, 42, 0.24);
+  }
+
+  .combo-option {
+    height: 46px;
+    padding: 0 12px;
   }
 
   .pagination-bar {
     align-items: flex-start;
     flex-direction: column;
+    gap: 10px;
+    padding: 12px;
   }
 
   .pagination-controls {
+    width: 100%;
     justify-content: flex-start;
+    gap: 8px;
+  }
+
+  .pagination-button {
+    flex: 1 1 calc(50% - 8px);
+    min-width: 0;
+    padding: 0 8px;
+  }
+
+  .page-jump {
+    flex: 1 1 100%;
+  }
+
+  .page-jump input {
+    width: 86px;
   }
 
   input,
   select,
   button {
     height: 54px;
+    font-size: 16px;
+  }
+
+  .table-wrap {
+    margin-top: 16px;
+    border-radius: 8px;
   }
 
   .detail-head {
@@ -1080,5 +1126,26 @@ a:hover {
 
   .stats-strip {
     grid-template-columns: repeat(2, minmax(120px, 1fr));
+  }
+
+  th,
+  td {
+    height: 58px;
+    padding: 0 12px;
+    font-size: 15px;
+  }
+}
+
+@media (hover: none) {
+  button:hover {
+    background: var(--button);
+  }
+
+  .pagination-button:hover {
+    background: #fff;
+  }
+
+  .combo-option:hover {
+    background: #fff;
   }
 }

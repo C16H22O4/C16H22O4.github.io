@@ -13,7 +13,7 @@ const PAGE_SIZE = 50;
 const QUERY_INTERVAL_MS = 500;
 const QUERY_RATE_WINDOW_MS = 1000;
 const QUERY_RATE_MAX_REQUESTS = 10;
-const STATIC_DATA_VERSION = "20260614-school-fix";
+const STATIC_DATA_VERSION = "20260614-mobile-fix";
 
 const columns = [
   ["nationalFirst", "国一"],
@@ -1317,6 +1317,7 @@ function renderProvinceMenu() {
     </button>`)
     .join("");
   provinceMenu.hidden = false;
+  positionProvinceMenu();
 }
 
 function selectProvince(value, pushSearch = true) {
@@ -1331,10 +1332,42 @@ function selectProvince(value, pushSearch = true) {
   }
 }
 
+function positionProvinceMenu() {
+  if (provinceMenu.hidden) return;
+  const rect = provinceSearch.getBoundingClientRect();
+  const margin = 12;
+  const top = Math.min(rect.bottom + 6, window.innerHeight - 120);
+  const width = Math.max(220, Math.min(rect.width, window.innerWidth - margin * 2));
+  const left = Math.min(Math.max(margin, rect.left), window.innerWidth - width - margin);
+  provinceMenu.style.left = `${left}px`;
+  provinceMenu.style.top = `${top}px`;
+  provinceMenu.style.width = `${width}px`;
+  provinceMenu.style.maxHeight = `${Math.max(160, window.innerHeight - top - margin)}px`;
+}
+
+function commitProvinceText({ allowFirst = true } = {}) {
+  if (provinceCombo.dataset.disabled === "true") return false;
+  const query = textTokens(provinceSearch.value);
+  if (!query) return false;
+  const exact = provinceOptions.find((option) => textTokens(option.label) === query || textTokens(option.value) === query);
+  if (exact) {
+    selectProvince(exact.value);
+    return true;
+  }
+  if (!allowFirst) return false;
+  const first = provinceMenu.querySelector(".combo-option");
+  if (first) {
+    selectProvince(first.dataset.value);
+    return true;
+  }
+  return false;
+}
+
 function clearProvince() {
   provinceValue.value = "";
   provinceSearch.value = "";
   provinceMenu.hidden = true;
+  provinceMenu.removeAttribute("style");
 }
 
 function syncProvinceControl() {
@@ -1781,9 +1814,18 @@ provinceSearch.addEventListener("input", () => {
   renderProvinceMenu();
 });
 provinceSearch.addEventListener("focus", renderProvinceMenu);
+provinceSearch.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    commitProvinceText();
+  }
+  if (event.key === "Escape") {
+    provinceMenu.hidden = true;
+  }
+});
 provinceSearch.addEventListener("blur", () => {
   window.setTimeout(() => {
-    if (!provinceValue.value) {
+    if (!provinceValue.value && !commitProvinceText({ allowFirst: false })) {
       provinceSearch.value = "";
     }
     provinceMenu.hidden = true;
@@ -1798,6 +1840,8 @@ provinceMenu.addEventListener("click", (event) => {
   if (!option) return;
   selectProvince(option.dataset.value);
 });
+window.addEventListener("resize", positionProvinceMenu);
+window.addEventListener("scroll", positionProvinceMenu, true);
 competitionSchool.addEventListener("input", scheduleCurrentSearch);
 competitionKeyword.addEventListener("input", scheduleCurrentSearch);
 schoolRankInput.addEventListener("input", scheduleCurrentSearch);
