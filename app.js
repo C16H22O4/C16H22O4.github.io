@@ -839,12 +839,9 @@ class StaticDataProviderV2 {
   }
 
   async loadRows(rowNumbers) {
-    const items = [];
-    for (const rowNo of rowNumbers) {
-      const item = await this.loadPersonByRow(rowNo);
-      if (item) items.push(item);
-    }
-    return items;
+    const shards = new Set(rowNumbers.map((rowNo) => peopleShardForRow(rowNo)));
+    await Promise.all([...shards].map((shard) => this.loadPeopleShard(shard)));
+    return rowNumbers.map((rowNo) => this.personByRow.get(Number(rowNo))).filter(Boolean);
   }
 
   async allSchools() {
