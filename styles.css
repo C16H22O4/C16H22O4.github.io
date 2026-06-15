@@ -128,6 +128,11 @@ body {
   gap: 24px;
 }
 
+.notice-stack {
+  display: grid;
+  gap: 10px;
+}
+
 .hero-panel {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
@@ -173,6 +178,13 @@ body {
   color: #8a4b12;
   font-size: 15px;
   font-weight: 700;
+  line-height: 1.55;
+}
+
+.data-notice.is-info {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
 }
 
 .hero-actions {
