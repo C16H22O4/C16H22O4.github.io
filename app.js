@@ -13,7 +13,8 @@ const PAGE_SIZE = 50;
 const QUERY_INTERVAL_MS = 500;
 const QUERY_RATE_WINDOW_MS = 1000;
 const QUERY_RATE_MAX_REQUESTS = 10;
-const STATIC_DATA_VERSION = "20260615-search-index";
+const STATIC_DATA_VERSION = "20260615-school-id-search";
+const STATIC_LOAD_CONCURRENCY = 8;
 
 const columns = [
   ["nationalFirst", "国一"],
@@ -444,6 +445,21 @@ function tokenShard(token) {
   return (hash >>> 0) % dataProvider.manifest.tokenShards;
 }
 
+async function mapWithConcurrency(items, limit, mapper) {
+  const values = [...items];
+  const results = new Array(values.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, values.length) }, async () => {
+    while (cursor < values.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await mapper(values[index], index);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
 async function createDataProvider() {
   try {
     await fetchJson("/api/meta");
@@ -703,6 +719,7 @@ class StaticDataProviderV2 {
     this.lookupById = new Map();
     this.schoolByName = new Map();
     this.schoolById = new Map();
+    this.schoolRowsById = new Map();
     this.subjectById = new Map();
     this.provinceById = new Map();
     this.provinceIdByName = new Map();
@@ -897,6 +914,72 @@ class StaticDataProviderV2 {
     return values.filter((value, index) => index === 0 || value !== values[index - 1]);
   }
 
+  mergeDisjointSortedPage(lists, limit, offset) {
+    const positions = new Array(lists.length).fill(0);
+    const heap = [];
+    const swap = (left, right) => {
+      const value = heap[left];
+      heap[left] = heap[right];
+      heap[right] = value;
+    };
+    const push = (entry) => {
+      heap.push(entry);
+      let index = heap.length - 1;
+      while (index > 0) {
+        const parent = Math.floor((index - 1) / 2);
+        if (heap[parent].value <= heap[index].value) break;
+        swap(parent, index);
+        index = parent;
+      }
+    };
+    const pop = () => {
+      if (!heap.length) return null;
+      const top = heap[0];
+      const last = heap.pop();
+      if (heap.length && last) {
+        heap[0] = last;
+        let index = 0;
+        while (true) {
+          const left = index * 2 + 1;
+          const right = left + 1;
+          let smallest = index;
+          if (left < heap.length && heap[left].value < heap[smallest].value) smallest = left;
+          if (right < heap.length && heap[right].value < heap[smallest].value) smallest = right;
+          if (smallest === index) break;
+          swap(index, smallest);
+          index = smallest;
+        }
+      }
+      return top;
+    };
+    const advance = (listIndex) => {
+      const list = lists[listIndex] || [];
+      positions[listIndex] += 1;
+      if (positions[listIndex] < list.length) {
+        push({ value: list[positions[listIndex]], listIndex });
+      }
+    };
+    for (let index = 0; index < lists.length; index += 1) {
+      if (lists[index]?.length) push({ value: lists[index][0], listIndex: index });
+    }
+    const page = [];
+    const total = lists.reduce((sum, list) => sum + Number(list?.length || 0), 0);
+    let seen = 0;
+    while (heap.length && page.length < limit) {
+      const entry = pop();
+      if (!entry) break;
+      const value = entry.value;
+      advance(entry.listIndex);
+      while (heap.length && heap[0].value === value) {
+        const duplicate = pop();
+        advance(duplicate.listIndex);
+      }
+      if (seen >= offset) page.push(value);
+      seen += 1;
+    }
+    return { total, page };
+  }
+
   async loadPeopleShard(shard) {
     await this.dictionaries();
     const rawItems = await this.load(`/data/people/${shard}.json`);
@@ -918,8 +1001,25 @@ class StaticDataProviderV2 {
 
   async loadRows(rowNumbers) {
     const shards = new Set(rowNumbers.map((rowNo) => peopleShardForRow(rowNo)));
-    await Promise.all([...shards].map((shard) => this.loadPeopleShard(shard)));
+    await mapWithConcurrency([...shards], STATIC_LOAD_CONCURRENCY, (shard) => this.loadPeopleShard(shard));
     return rowNumbers.map((rowNo) => this.personByRow.get(Number(rowNo))).filter(Boolean);
+  }
+
+  async loadSchoolRowShard(shard) {
+    const payload = await this.load(`/data/school_rows/${shard}.json`);
+    for (const entry of payload || []) {
+      this.schoolRowsById.set(Number(entry[0]), this.decodeDeltas(entry[1]));
+    }
+    return payload;
+  }
+
+  async loadSchoolRows(schoolId) {
+    const key = Number(schoolId);
+    if (this.schoolRowsById.has(key)) return this.schoolRowsById.get(key);
+    const shardSize = Number(this.manifest.schoolRowShardSize || 256);
+    const shard = Math.max(0, Math.floor((key - 1) / shardSize));
+    await this.loadSchoolRowShard(shard);
+    return this.schoolRowsById.get(key) || [];
   }
 
   async allSchools() {
@@ -983,37 +1083,37 @@ class StaticDataProviderV2 {
     return this.intersectTokenRows("search", "c", chars);
   }
 
-  async rowsForSchoolQuery(query) {
+  async schoolListsForQuery(query) {
     const q = normalizeClientText(query);
     if (!q) return [];
-    if (/^[0-9a-z]{1,24}$/.test(q)) {
-      const rows = await this.tokenRows("school_search", "p", q);
-      if (rows.length) return rows;
-      const schoolIds = await this.tokenRows("school_search_ids", "p", q);
-      return this.rowsForSchoolIds(schoolIds);
-    }
+    if (/^[0-9a-z]{1,24}$/.test(q)) return this.schoolListsForIds(await this.tokenRows("school_search_ids", "p", q));
     const grams = this.queryBigrams(q);
     if (grams.length) {
-      const rows = await this.intersectTokenRows("school_search", "n", grams);
-      if (rows.length || q.length > 1) return rows;
+      const schoolIds = await this.intersectTokenRows("school_search_ids", "n", grams);
+      if (schoolIds.length || q.length > 1) return this.schoolListsForIds(schoolIds);
     }
     const chars = [...new Set([...q].filter(Boolean))];
-    return this.intersectTokenRows("school_search", "c", chars);
+    return this.schoolListsForIds(await this.intersectTokenRows("school_search_ids", "c", chars));
   }
 
-  async rowsForSchoolIds(schoolIds) {
-    const lists = await Promise.all(
-      [...new Set((schoolIds || []).map((id) => Number(id)).filter(Boolean))]
-        .map((schoolId) => this.load(`/data/schools/${schoolId}.json`))
-    );
-    return this.mergeSortedUnique(lists);
+  async schoolListsForIds(schoolIds) {
+    const ids = [...new Set((schoolIds || []).map((id) => Number(id)).filter(Boolean))];
+    return mapWithConcurrency(ids, STATIC_LOAD_CONCURRENCY, (schoolId) => this.loadSchoolRows(schoolId));
+  }
+
+  filterRowsByLists(rows, lists) {
+    const allowed = new Set();
+    for (const list of lists || []) {
+      for (const rowNo of list || []) allowed.add(Number(rowNo));
+    }
+    return (rows || []).filter((rowNo) => allowed.has(Number(rowNo)));
   }
 
   async rowsForSearch(q, school) {
     let rows = q ? await this.candidateIds(q) : null;
     if (school) {
-      const schoolRows = await this.rowsForSchoolQuery(school);
-      rows = rows === null ? schoolRows : this.intersectSorted(rows, schoolRows);
+      const schoolLists = await this.schoolListsForQuery(school);
+      rows = rows === null ? this.mergeSortedUnique(schoolLists) : this.filterRowsByLists(rows, schoolLists);
     }
     if (rows === null) {
       return Array.from({ length: this.manifest.meta.contestantCount }, (_, index) => index + 1);
@@ -1039,6 +1139,11 @@ class StaticDataProviderV2 {
         limit,
         offset,
       };
+    }
+    if (!q && school) {
+      const lists = await this.schoolListsForQuery(school);
+      const result = this.mergeDisjointSortedPage(lists, limit, offset);
+      return { total: result.total, items: await this.loadRows(result.page), limit, offset };
     }
     const rows = await this.rowsForSearch(q, school);
     return { total: rows.length, items: await this.loadRows(paginateItems(rows, limit, offset)), limit, offset };
