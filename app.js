@@ -135,6 +135,7 @@ let provinceOptions = [];
 let competitionOptions = { languages: [], groups: [], subjectsByEdition: {} };
 let dataProvider = null;
 let provinceMenuFrame = 0;
+let detailReturnTarget = null;
 const lastSearchInputKeys = { person: "", competition: "", school: "" };
 const activeSearchRequestKeys = { person: "", school: "" };
 const lastCompletedSearchRequestKeys = { person: "", school: "" };
@@ -239,6 +240,50 @@ function pushSearchUrl(mode, params, push) {
   if (push) {
     history.pushState({ view: "main", mode }, "", `/?${params.toString()}`);
   }
+}
+
+function currentRouteTarget() {
+  const currentUrl = `${window.location.pathname}${window.location.search}`;
+  if (!views.schoolDetail.hidden && state.currentSchool) {
+    return {
+      view: "schoolDetail",
+      school: state.currentSchool,
+      page: currentPage("schoolDetail"),
+      url: currentUrl,
+    };
+  }
+  if (!views.detail.hidden) return null;
+  return {
+    view: "main",
+    mode: state.mode || "home",
+    url: currentUrl || urlForMode(state.mode || "home"),
+  };
+}
+
+function historyStateForTarget(target) {
+  if (!target) return {};
+  if (target.view === "schoolDetail") {
+    return { view: "schoolDetail", school: target.school };
+  }
+  return { view: "main", mode: target.mode || "home" };
+}
+
+function restoreRouteTarget(target) {
+  if (!target) {
+    navigate(state.mode === "home" ? "person" : state.mode);
+    return;
+  }
+  history.replaceState(historyStateForTarget(target), "", target.url || urlForMode(target.mode || "home"));
+  hydrateFromUrl();
+}
+
+function returnFromDetail() {
+  const target = history.state?.returnTo || detailReturnTarget;
+  if (target && history.length > 1) {
+    history.back();
+    return;
+  }
+  restoreRouteTarget(target);
 }
 
 function isRepeatedSearchRequest(mode, key) {
@@ -1767,6 +1812,8 @@ function renderSchools(items, offset = 0) {
 }
 
 async function showDetail(id, push = true) {
+  const returnTo = push ? currentRouteTarget() : null;
+  detailReturnTarget = returnTo;
   updateNav("person");
   showOnly("detail");
   document.querySelector("#detail-name").textContent = "";
@@ -1777,7 +1824,7 @@ async function showDetail(id, push = true) {
     const payload = await dataProvider.contestant(id);
     renderDetail(payload);
     if (push) {
-      history.pushState({ view: "detail", id }, "", `/contestants/${encodeURIComponent(id)}`);
+      history.pushState({ view: "detail", id, returnTo }, "", `/contestants/${encodeURIComponent(id)}`);
     }
   } catch {
     document.querySelector("#detail-name").textContent = "未找到";
@@ -1886,14 +1933,17 @@ function reserveQuerySlot() {
 function hydrateFromUrl() {
   const path = window.location.pathname;
   if (path.startsWith("/contestants/")) {
+    detailReturnTarget = history.state?.returnTo || null;
     showDetail(decodeURIComponent(path.split("/").pop()), false);
     return;
   }
   if (path.startsWith("/schools/")) {
+    detailReturnTarget = null;
     state.schoolDetailPage = parsePage(new URLSearchParams(window.location.search).get("page"));
     showSchoolDetail(decodeURIComponent(path.split("/").pop()), false);
     return;
   }
+  detailReturnTarget = null;
   const params = new URLSearchParams(window.location.search);
   const mode = ["home", "competition", "person", "school"].includes(params.get("mode")) ? params.get("mode") : "home";
   const page = parsePage(params.get("page"));
@@ -2039,7 +2089,7 @@ document.addEventListener("click", (event) => {
   }
 });
 
-backButton.addEventListener("click", () => navigate(state.mode === "home" ? "person" : state.mode));
+backButton.addEventListener("click", returnFromDetail);
 schoolBackButton.addEventListener("click", () => navigate("school"));
 
 window.addEventListener("popstate", hydrateFromUrl);
