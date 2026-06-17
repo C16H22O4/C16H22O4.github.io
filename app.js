@@ -13,7 +13,7 @@ const PAGE_SIZE = 50;
 const QUERY_INTERVAL_MS = 500;
 const QUERY_RATE_WINDOW_MS = 1000;
 const QUERY_RATE_MAX_REQUESTS = 10;
-const STATIC_DATA_VERSION = "20260615-school-id-search";
+const STATIC_DATA_VERSION = "20260617-national17";
 const STATIC_LOAD_CONCURRENCY = 8;
 
 const columns = [
