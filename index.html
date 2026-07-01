@@ -5,7 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>蓝桥杯 Finder</title>
     <link rel="icon" href="/logo.png">
-    <link rel="stylesheet" href="/styles.css?v=20260616-notices">
+    <script>
+      (() => {
+        const key = "lanqiao-theme";
+        let stored = "";
+        try {
+          stored = window.localStorage.getItem(key);
+        } catch {
+          stored = "";
+        }
+        const theme = stored === "dark" || stored === "light" ? stored : "light";
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
+    <link rel="stylesheet" href="/styles.css?v=20260701-theme">
   </head>
   <body>
     <header class="site-header">
@@ -19,6 +32,7 @@
         <a class="nav-link" href="/?mode=person" data-mode="person">选手</a>
         <a class="nav-link" href="/?mode=school" data-mode="school">学校</a>
       </nav>
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="切换到深色主题">深色</button>
     </header>
 
     <main class="shell">
@@ -323,6 +337,6 @@
         </div>
       </section>
     </main>
-    <script src="/app.js?v=20260617-detail-back"></script>
+    <script src="/app.js?v=20260701-theme"></script>
   </body>
 </html>

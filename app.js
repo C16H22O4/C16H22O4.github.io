@@ -15,6 +15,8 @@ const QUERY_RATE_WINDOW_MS = 1000;
 const QUERY_RATE_MAX_REQUESTS = 10;
 const STATIC_DATA_VERSION = "20260617-national17";
 const STATIC_LOAD_CONCURRENCY = 8;
+const THEME_STORAGE_KEY = "lanqiao-theme";
+const DEFAULT_THEME = "light";
 
 const columns = [
   ["nationalFirst", "国一"],
@@ -91,6 +93,7 @@ const homeSchools = document.querySelector("#home-schools");
 const backButton = document.querySelector("#back-button");
 const schoolBackButton = document.querySelector("#school-back-button");
 const homeLink = document.querySelector("[data-home]");
+const themeToggle = document.querySelector("#theme-toggle");
 const pagers = {
   person: {
     bar: document.querySelector("#person-pagination"),
@@ -139,6 +142,37 @@ let detailReturnTarget = null;
 const lastSearchInputKeys = { person: "", competition: "", school: "" };
 const activeSearchRequestKeys = { person: "", school: "" };
 const lastCompletedSearchRequestKeys = { person: "", school: "" };
+
+function normalizeTheme(value) {
+  return value === "dark" || value === "light" ? value : DEFAULT_THEME;
+}
+
+function setTheme(theme, persist = false) {
+  const nextTheme = normalizeTheme(theme);
+  document.documentElement.dataset.theme = nextTheme;
+  if (themeToggle) {
+    const nextLabel = nextTheme === "dark" ? "浅色" : "深色";
+    themeToggle.textContent = nextLabel;
+    themeToggle.setAttribute("aria-label", `切换到${nextLabel}主题`);
+  }
+  if (persist) {
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+    } catch {
+      // Theme persistence is optional; keep the visible theme if storage is unavailable.
+    }
+  }
+}
+
+function initTheme() {
+  let storedTheme = "";
+  try {
+    storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+  } catch {
+    storedTheme = "";
+  }
+  setTheme(storedTheme, false);
+}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -2004,6 +2038,11 @@ homeLink.addEventListener("click", (event) => {
   navigate("home");
 });
 
+themeToggle?.addEventListener("click", () => {
+  const currentTheme = normalizeTheme(document.documentElement.dataset.theme);
+  setTheme(currentTheme === "dark" ? "light" : "dark", true);
+});
+
 qInput.addEventListener("input", scheduleCurrentSearch);
 schoolInput.addEventListener("input", scheduleCurrentSearch);
 scopeSelect.addEventListener("change", () => {
@@ -2095,6 +2134,7 @@ schoolBackButton.addEventListener("click", () => navigate("school"));
 window.addEventListener("popstate", hydrateFromUrl);
 
 async function init() {
+  initTheme();
   bindPager("person");
   bindPager("competition");
   bindPager("school");
